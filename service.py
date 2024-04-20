@@ -10,7 +10,7 @@ import http.client
 kafka_bridge_password = os.getenv('KAFKA_BRDIGE_PASSWORD')
 kafka_password = os.getenv('KAFKA_PASSWORD')
 
-# Configuración del Kafka HTTP Bridge
+# Kafka HTTP Bridge configuration
 KAFKA_HTTP_BRIDGE = 'api.kafka.safewchair.duckdns.org'
 ALERTS_TOPIC = 'Alerts'
 headers = {
@@ -18,7 +18,7 @@ headers = {
     'Authorization': f'Basic {kafka_bridge_password}'
 }
 
-# Configuración del consumer de Kafka
+# Kafka consumer configuration
 KAFKA_BROKERS = 'kafka.safewchair.duckdns.org:31565'
 CONSUMER_TOPIC = 'Testing'
 SECURITY_PROTOCOL = 'SASL_PLAINTEXT'
@@ -26,7 +26,7 @@ SASL_MECHANISM = 'SCRAM-SHA-512'
 USERNAME = 'safewchair'
 PASSWORD = kafka_password
 
-# Cargar el modelo y el scaler
+# Load the model and scaler
 model = load_model('model.h5')
 scaler = load('scaler.joblib')
 
@@ -59,8 +59,8 @@ def send_alert(message):
     conn.close()
 
 for message in consumer:
-    # print(f"Mensaje recibido: {message.value}")
-    coordenadas_str = message.value  # Asumiendo que cada mensaje es una cadena de coordenadas separadas por comas
+    # print(f"Received message: {message.value}")
+    coordenadas_str = message.value  # Assuming each message is a string of coordinates separated by commas
     try:
         coordenadas = np.fromstring(coordenadas_str, dtype=float, sep=',')
         buffer_coordenadas.append(coordenadas)
@@ -76,10 +76,12 @@ for message in consumer:
             
             if predicted_class[0] == 1:
                 now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                alert_message = f"Caída detectada en {now}"
-                print(alert_message)  # Imprime la detección de caída y la hora localmente.
-                send_alert(alert_message)  # Envía la alerta a través de Kafka
+                alert_message = f"Fall detected at {now}"
+                print(alert_message)  # Print the fall detection and local time.
+                send_alert(alert_message)  # Send the alert via Kafka
 
             buffer_coordenadas = []
     except ValueError as e:
-        print(f"Error al procesar las coordenadas: {e}")
+        print(f"Error processing coordinates: {e}")
+    except Exception as e:
+        print(f"Error during prediction or sending alerts: {e}")
