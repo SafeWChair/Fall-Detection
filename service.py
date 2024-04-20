@@ -42,24 +42,28 @@ consumer = KafkaConsumer(
 )
 
 buffer_coordenadas = []
+cooldown_time = None  # Initialize cooldown time
 
 def send_alert(message):
-    conn = http.client.HTTPSConnection(KAFKA_HTTP_BRIDGE)
-    payload = json.dumps({
-        "records": [
-            {
-                "key": "fall-detection",
-                "value": message
-            }
-        ]
-    })
-    conn.request("POST", f"/topics/{ALERTS_TOPIC}", payload, headers)
-    response = conn.getresponse()
-    #print(f"Status: {response.status}, Response: {response.read().decode('utf-8')}")
-    conn.close()
+    global cooldown_time
+    now = datetime.datetime.now()
+    if cooldown_time is None or now >= cooldown_time:
+        conn = http.client.HTTPSConnection(KAFKA_HTTP_BRIDGE)
+        payload = json.dumps({
+            "records": [
+                {
+                    "key": "fall-detection",
+                    "value": message
+                }
+            ]
+        })
+        conn.request("POST", f"/topics/{ALERTS_TOPIC}", payload, headers)
+        response = conn.getresponse()
+        conn.close()
+        cooldown_time = now + datetime.timedelta(seconds=10)  # Set cooldown period to 10 seconds
+        print(f"Alert sent. Cooldown set until {cooldown_time}.")
 
 for message in consumer:
-    # print(f"Received message: {message.value}")
     coordenadas_str = message.value  # Assuming each message is a string of coordinates separated by commas
     try:
         coordenadas = np.fromstring(coordenadas_str, dtype=float, sep=',')
