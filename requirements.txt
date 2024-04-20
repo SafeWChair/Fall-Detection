@@ -1,0 +1,6 @@
+pandas
+tensorflow
+matplotlib
+kafka-python
+joblib
+scikit-learn
