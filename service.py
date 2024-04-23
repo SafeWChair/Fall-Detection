@@ -69,11 +69,11 @@ for message in consumer:
         coordenadas = np.fromstring(coordenadas_str, dtype=float, sep=',')
         buffer_coordenadas.append(coordenadas)
         
-        if len(buffer_coordenadas) == 300:
+        if len(buffer_coordenadas) == 600:
             data = np.array(buffer_coordenadas)
             data_flattened = data.flatten().reshape(1, -1)
             data_scaled = scaler.transform(data_flattened)
-            data_scaled = data_scaled.reshape((1, 300, 6))
+            data_scaled = data_scaled.reshape((1, 600, 6))
             
             prediction = model.predict(data_scaled)
             predicted_class = np.argmax(prediction, axis=1)
