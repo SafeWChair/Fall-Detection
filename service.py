@@ -7,18 +7,18 @@ from joblib import load
 from kafka import KafkaConsumer
 import http.client
 
+n_pasos = 600
+ventana_deslizante = 50  # Tamaño del deslizamiento de la ventana
+
+# Configuración de Kafka y HTTP Bridge
 kafka_bridge_password = os.getenv('KAFKA_BRDIGE_PASSWORD')
 kafka_password = os.getenv('KAFKA_PASSWORD')
-
-# Kafka HTTP Bridge configuration
 KAFKA_HTTP_BRIDGE = 'api.kafka.safewchair.duckdns.org'
 ALERTS_TOPIC = 'Alerts'
 headers = {
     'content-type': 'application/vnd.kafka.json.v2+json',
     'Authorization': f'Basic {kafka_bridge_password}'
 }
-
-# Kafka consumer configuration
 KAFKA_BROKERS = 'kafka.safewchair.duckdns.org:31565'
 CONSUMER_TOPIC = 'Testing'
 SECURITY_PROTOCOL = 'SASL_PLAINTEXT'
@@ -26,9 +26,11 @@ SASL_MECHANISM = 'SCRAM-SHA-512'
 USERNAME = 'safewchair'
 PASSWORD = kafka_password
 
-# Load the model and scaler
-model = load_model('model.h5')
-scaler = load('scaler.joblib')
+# Carga de modelos y escaladores
+model_acc = load_model('model_acc.h5')
+model_gyro = load_model('model_gyro.h5')
+scaler_acc = load('scaler_acc.joblib')
+scaler_gyro = load('scaler_gyro.joblib')
 
 consumer = KafkaConsumer(
     CONSUMER_TOPIC,
@@ -41,8 +43,9 @@ consumer = KafkaConsumer(
     value_deserializer=lambda x: json.loads(x.decode('utf-8'))
 )
 
-buffer_coordenadas = []
-cooldown_time = None  # Initialize cooldown time
+buffer_acc = []
+buffer_gyro = []
+cooldown_time = None
 
 def send_alert(message):
     global cooldown_time
@@ -60,31 +63,43 @@ def send_alert(message):
         conn.request("POST", f"/topics/{ALERTS_TOPIC}", payload, headers)
         response = conn.getresponse()
         conn.close()
-        cooldown_time = now + datetime.timedelta(seconds=10)  # Set cooldown period to 10 seconds
+        cooldown_time = now + datetime.timedelta(seconds=10)
         print(f"Alert sent. Cooldown set until {cooldown_time}.")
 
 for message in consumer:
-    coordenadas_str = message.value  # Assuming each message is a string of coordinates separated by commas
+    coordenadas_str = message.value
     try:
         coordenadas = np.fromstring(coordenadas_str, dtype=float, sep=',')
-        buffer_coordenadas.append(coordenadas)
-        
-        if len(buffer_coordenadas) == 600:
-            data = np.array(buffer_coordenadas)
-            data_flattened = data.flatten().reshape(1, -1)
-            data_scaled = scaler.transform(data_flattened)
-            data_scaled = data_scaled.reshape((1, 600, 6))
+        buffer_acc.append(coordenadas[:3])
+        buffer_gyro.append(coordenadas[3:])
+
+        if len(buffer_acc) >= n_pasos:
+            # Procesar la ventana actual
+            data_acc = np.array(buffer_acc[:n_pasos]).flatten().reshape(1, -1)
+            data_gyro = np.array(buffer_gyro[:n_pasos]).flatten().reshape(1, -1)
             
-            prediction = model.predict(data_scaled)
-            predicted_class = np.argmax(prediction, axis=1)
+            # Escalar y reestructurar
+            data_acc_scaled = scaler_acc.transform(data_acc)
+            data_gyro_scaled = scaler_gyro.transform(data_gyro)
+            data_acc_scaled = data_acc_scaled.reshape((1, n_pasos, 3))
+            data_gyro_scaled = data_gyro_scaled.reshape((1, n_pasos, 3))
             
-            if predicted_class[0] == 1:
+            # Predicción
+            pred_acc = model_acc.predict(data_acc_scaled)
+            pred_gyro = model_gyro.predict(data_gyro_scaled)
+            fall_detected_acc = np.argmax(pred_acc, axis=1)[0] == 1
+            fall_detected_gyro = np.argmax(pred_gyro, axis=1)[0] == 1
+
+            # Si ambos modelos detectan una caída
+            if fall_detected_acc and fall_detected_gyro:
                 now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 alert_message = f"Fall detected at {now}"
-                print(alert_message)  # Print the fall detection and local time.
-                send_alert(alert_message)  # Send the alert via Kafka
+                print(alert_message)
+                send_alert(alert_message)
 
-            buffer_coordenadas = []
+            # Mover la ventana deslizante
+            buffer_acc = buffer_acc[ventana_deslizante:]
+            buffer_gyro = buffer_gyro[ventana_deslizante:]
     except ValueError as e:
         print(f"Error processing coordinates: {e}")
     except Exception as e:
