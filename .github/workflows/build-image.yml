@@ -8,8 +8,8 @@ on:
       - 'Dockerfile'
       - 'service.py'
       - 'requirements.txt'
-      - 'model.h5'
-      - 'scaler.joblib'
+      - 'model*'
+      - 'scaler*'
 
 
 jobs:
