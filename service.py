@@ -63,7 +63,7 @@ def send_alert(message):
         conn.request("POST", f"/topics/{ALERTS_TOPIC}", payload, headers)
         response = conn.getresponse()
         conn.close()
-        cooldown_time = now + datetime.timedelta(seconds=10)
+        cooldown_time = now + datetime.timedelta(seconds=15)
         print(f"Alert sent. Cooldown set until {cooldown_time}.")
 
 for message in consumer:
